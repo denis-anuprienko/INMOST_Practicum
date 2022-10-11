@@ -200,6 +200,32 @@ void main_linear_solver(Mesh &m)
 	}
 }
 
+double phi(Cell &c, Node &n, double x_, double y_)
+{
+    ElementArray<Node> nodes = c.getNodes();
+	int n_ind = 0;
+	double x[3];
+	double y[3];
+	for(int i = 0; i < 3; i++){
+		if(n == nodes[i])
+			n_ind = i;
+		double coords[3];
+		nodes[i].Centroid(coords);
+		x[i] = coords[0];
+		y[i] = coords[1];
+	}
+	
+	if(n_ind == 0){
+		return ((x_ - x[2])*(y[1] - y[2]) - (x[1] - x[2])*(y_ - y[2])) / ((x[0] - x[2])*(y[1] - y[2]) - (x[1] - x[2])*(y[0] - y[2])); 
+	}
+	else if(n_ind == 1){
+		return ((x_ - x[2])*(y[0] - y[2]) - (x[0] - x[2])*(y_ - y[2])) / ((x[1] - x[2])*(y[0] - y[2]) - (x[0] - x[2])*(y[1] - y[2])); 
+	}
+	else if(n_ind == 2){
+		return ((x_ - x[0])*(y[1] - y[0]) - (x[1] - x[0])*(y_ - y[0])) / ((x[2] - x[0])*(y[1] - y[2]) - (x[1] - x[0])*(y[2] - y[1])); 
+	}
+}
+
 int main(int argc, char ** argv)
 {
 	if( argc < 2 )
