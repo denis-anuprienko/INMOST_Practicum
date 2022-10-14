@@ -121,6 +121,42 @@ ParaView (\texttt{https://www.paraview.org/}) -- повсеместно испо
 	\caption{Интерфейс ParaView\label{fig:pv_gui}}
 \end{figure}
 
+\section{Генерация сеток в Gmsh}
+Gmsh (\texttt{https://gmsh.info/}) -- один из самых популярных генераторов сеток, способный строить двумерные и трехмерные сетки и сохранять их в формате VTK. 
+
+\subsection{Построение треугольных сеток в единичном квадрате}
+Воспользуемся малой частью функционала Gmsh, чтобы построить треугольные сетки в единичном квадрате.
+В директории \texttt{data} находится файл для Gmsh под названием \texttt{square.geo}. Откроем его в Gmsh (см. рис. \ref{fig:gmsh_gui}).
+
+\begin{figure}[h] \centering
+	\includegraphics[scale=0.4]{gmsh_gui.png}
+	\caption{Интерфейс Gmsh\label{fig:gmsh_gui}}
+\end{figure}
+
+Построение сеток в Gmsh происходит следующим образом. Сначала разбиваются одномерные объекты (ребра), затем двумерные, а если область трехмерная -- то и трехмерные. Нам сначала нужно разбить ребра, для чего в меню \texttt{Mesh} выберем \texttt{Define} и в нем нажмем на \texttt{1D}. Далее строим двумерную сетку, выбрав \texttt{2D}. Результат представлен на рисунке \ref{fig:gmsh_uniform_1}. Сетка содержит 4 треугольника. Граница квадрата фактически не разбивалась, поскольку в настройках по умолчанию стоит разбиение линий на отрезки длины 1. 
+
+\begin{figure}[h] \centering
+	\includegraphics[scale=0.4]{gmsh_uniform_1.png}
+	\caption{Простейшая треугольная сетка в Gmsh\label{fig:gmsh_uniform_1}}
+\end{figure}
+
+Как получить более мелкие сетки? Во-первых, можно измельчить имеющуюся сетку, выбрав \texttt{Mesh -> Define -> Refine by splitting}. После трехкратного применения этого действия сетка выглядит, как показано на рисунке \ref{fig:gmsh_uniform_1_refine3}.
+
+\begin{figure}[h] \centering
+	\includegraphics[scale=0.4]{gmsh_uniform_1_refine3.png}
+	\caption{Сетка, полученная измельчением простейшей\label{fig:gmsh_uniform_1_refine3}}
+\end{figure}
+
+Но такая сетка не является достаточно интересной, все треугольники в ней одинаковые (с точностью до поворота), имеется некоторая структура. Поэтому применим также второй способ. Вернемся к \texttt{Mesh -> Define -> 1D}. И сделаем \texttt{Refine by splitting} в этот момент. Применив 3 раза, получим разбиение отрезков на $2^3 = 8$ частей (этого пока не видно). Затем применим \texttt{Mesh -> Define -> 2D} и получим результат, представленный на рисунке \ref{fig:gmsh_unstr}.
+
+\subsection{Сохранение в формате VTK}
+Нужно выбрать \texttt{File -> Export} или просто нажать \texttt{Ctrl+E} и задать имя файла, оканчивающееся на \texttt{.vtk}.
+
+\begin{figure}[h] \centering
+	\includegraphics[scale=0.4]{gmsh_unstr.png}
+	\caption{Неструктурированная сетка, полученная предварительным измельчением разбиения границы\label{fig:gmsh_unstr}}
+\end{figure}
+
 \section{Работа с данными на сетках в INMOST}
 
 \subsection{Создайте свой проект}
