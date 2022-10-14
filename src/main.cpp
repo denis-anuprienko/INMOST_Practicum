@@ -200,13 +200,14 @@ void main_linear_solver(Mesh &m)
 	}
 }
 
-double phi(Cell &c, Node &n, double x_, double y_)
+// Get value of basis function (phi) related to node 'n' on cell 'c'
+double basis_func(const Cell &c, const Node &n, double x_, double y_)
 {
     ElementArray<Node> nodes = c.getNodes();
-	int n_ind = 0;
+	unsigned n_ind = 0;
 	double x[3];
 	double y[3];
-	for(int i = 0; i < 3; i++){
+	for(unsigned i = 0; i < 3; i++){
 		if(n == nodes[i])
 			n_ind = i;
 		double coords[3];
@@ -216,14 +217,157 @@ double phi(Cell &c, Node &n, double x_, double y_)
 	}
 	
 	if(n_ind == 0){
-		return ((x_ - x[2])*(y[1] - y[2]) - (x[1] - x[2])*(y_ - y[2])) / ((x[0] - x[2])*(y[1] - y[2]) - (x[1] - x[2])*(y[0] - y[2])); 
+		return ((x_   - x[2])*(y[1] - y[2]) - (x[1] - x[2])*(y_   - y[2])) /
+			   ((x[0] - x[2])*(y[1] - y[2]) - (x[1] - x[2])*(y[0] - y[2]));
 	}
 	else if(n_ind == 1){
-		return ((x_ - x[2])*(y[0] - y[2]) - (x[0] - x[2])*(y_ - y[2])) / ((x[1] - x[2])*(y[0] - y[2]) - (x[0] - x[2])*(y[1] - y[2])); 
+		return ((x_   - x[2])*(y[0] - y[2]) - (x[0] - x[2])*(y_   - y[2])) /
+			   ((x[1] - x[2])*(y[0] - y[2]) - (x[0] - x[2])*(y[1] - y[2]));
 	}
 	else if(n_ind == 2){
-		return ((x_ - x[0])*(y[1] - y[0]) - (x[1] - x[0])*(y_ - y[0])) / ((x[2] - x[0])*(y[1] - y[2]) - (x[1] - x[0])*(y[2] - y[1])); 
+		return ((x_   - x[0])*(y[1] - y[0]) - (x[1] - x[0])*(y_   - y[0])) /
+			   ((x[2] - x[0])*(y[1] - y[0]) - (x[1] - x[0])*(y[2] - y[0]));
 	}
+	else{
+		printf("Unexpected n_ind = %d\n", n_ind);
+		exit(1);
+	}
+}
+
+// Get value of linear approximation of function 'f' on cell 'c'
+// defined as sum of 3 linear functions related to each node
+double linear_approx_tri(const Cell &c, double (*f)(double, double), double x, double y)
+{
+	ElementArray<Node> nodes = c.getNodes();
+	double res = 0.0;
+	for(unsigned i = 0; i < 3; i++){
+		double xn[3];
+		nodes[i].Barycenter(xn);
+		res += f(xn[0], xn[1]) * basis_func(c, nodes[i], x, y);
+	}
+	return res;
+}
+
+// Get actual coordinates from barycentric
+// node_x, node_y - coordinates of triangle nodes
+// eta            - barycentric coordinates
+// x, y           - resulting real coordinates
+void coords_from_barycentric(double *node_x, double *node_y, double *eta, double *x, double *y)
+{
+	*x = node_x[0] * eta[0] + node_x[1] * eta[1] + node_x[2] * eta[2];
+	*y = node_y[0] * eta[0] + node_y[1] * eta[1] + node_y[2] * eta[2];
+}
+
+// Function to approximate
+double g(double x, double y)
+{
+	return sin(10*x)*sin(10*y) + 100*x*exp(y);
+}
+
+// Get integral of 'f' over cell 'c'
+double integrate_over_triangle(const Cell &c, double (*f)(double, double))
+{
+	double res = 0.0;
+	double w3 = 0.205950504760887;
+	double w6 = 0.063691414286223;
+	double eta3[3] = {0.124949503233232, 0.437525248383384, 0.437525248383384};
+	double eta6[3] = {0.797112651860071, 0.165409927389841, 0.037477420750088};
+
+	ElementArray<Node> nodes = c.getNodes();
+	if(nodes.size() != 3){
+		printf("Cell is not a triangle, has %lld nodes!\n", nodes.size());
+		exit(1);
+	}
+	// Coordinates of triangle nodes
+	double node_x[3], node_y[3];
+	// Set them
+	for(unsigned i = 0; i < 3; i++){
+		double c[3];
+		nodes[i].Centroid(c);
+		node_x[i] = c[0];
+		node_y[i] = c[1];
+	}
+
+	// Add contribution from all combinations in eta3
+	double x, y, val;
+	double eta[3];
+	eta[0] = eta3[0];
+	eta[1] = eta3[1];
+	eta[2] = eta3[2];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x,y);
+	//printf("x = %e, y = %e, val = %e\n", x, y, val);
+	res += w3 * val;
+	eta[0] = eta3[1];
+	eta[1] = eta3[2];
+	eta[2] = eta3[0];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x,y);
+	res += w3 * val*val;
+	eta[0] = eta3[2];
+	eta[1] = eta3[0];
+	eta[2] = eta3[1];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x,y);
+	res += w3 * val*val;
+
+
+	// Add contribution from all combinations in eta6
+	eta[0] = eta6[0];
+	eta[1] = eta6[1];
+	eta[2] = eta6[2];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x,y);
+	res += w6 * val;
+	eta[0] = eta6[0];
+	eta[1] = eta6[2];
+	eta[2] = eta6[1];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x,y);
+	res += w6 * val;
+	eta[0] = eta6[1];
+	eta[1] = eta6[0];
+	eta[2] = eta6[2];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x,y);
+	res += w6 * val;
+	eta[0] = eta6[1];
+	eta[1] = eta6[2];
+	eta[2] = eta6[0];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x,y);
+	res += w6 * val;
+	eta[0] = eta6[2];
+	eta[1] = eta6[0];
+	eta[2] = eta6[1];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x,y);
+	res += w6 * val;
+	eta[0] = eta6[2];
+	eta[1] = eta6[1];
+	eta[2] = eta6[0];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x,y);
+	res += w6 * val;
+
+	res *= c.Volume();
+	return res;
+}
+
+// A stub!
+// Actually computes integral of g over mesh
+void main_diff_node_funcs(Mesh &m)
+{
+	//double normL2 = 0.0;
+	double int_g = 0.0;
+	for(Mesh::iteratorCell icell = m.BeginCell(); icell != m.EndCell(); icell++){
+		Cell c = icell->getAsCell();
+		int_g += integrate_over_triangle(c, g); // functions are constant on cell
+	}
+	//normL2 = sqrt(normL2);
+	//cout << "|u - u_approx|_C  = " << normC  << endl;
+	//cout << "|u - u_approx|_L2 = " << normL2 << endl;
+	cout << "int(g) = " << int_g << endl;
 }
 
 int main(int argc, char ** argv)
@@ -241,6 +385,7 @@ int main(int argc, char ** argv)
 	//main_mesh_diam(m);
 	//main_diff_cell_funcs(m);
 	//main_linear_solver(m);
+	//main_diff_node_funcs(m);
 	m.Save("res.vtk");
 	return 0;
 }
