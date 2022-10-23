@@ -84,7 +84,13 @@ Problem::~Problem()
 void Problem::initProblem()
 {
 	// Init tags
-	//tagConc = m.CreateTag(...)
+	tagConc = m.CreateTag(tagNameConc, DATA_REAL, NODE, NONE, 1);
+	tagD = m.CreateTag(tagNameD, DATA_REAL, CELL, NONE, 3);
+	tagBCtype = m.CreateTag(tagNameBCtype, DATA_INTEGER, NODE, NODE, 1);
+	tagBCval = m.CreateTag(tagNameBCval, DATA_REAL, NODE, NODE, 1);
+	tagSource =  m.CreateTag(tagNameSource, DATA_REAL, NODE, NONE, 1);
+	tagConcAn =  m.CreateTag(tagNameConcAn, DATA_REAL, NODE, NONE, 1);
+	tagGlobInd = m.CreateTag(tagNameGlobInd, DATA_INTEGER, NODE, NONE, 1);
 
 	// Cell loop
 	// 1. Check that cell is a triangle
@@ -92,9 +98,14 @@ void Problem::initProblem()
 	for(Mesh::iteratorCell icell = m.BeginCell(); icell != m.EndCell(); icell++){
 		Cell c = icell->getAsCell();
 		ElementArray<Node> nodes = c.getNodes();
-		// ... check size of 'nodes'
-		// ...
-		// ... write to 'tagD'
+		if (nodes.size() != 3){
+			cout<<"Cell is not a triangle!!!";
+			exit(1);
+		}
+		
+		c.RealArray(tagD)[0] = dx;
+		c.RealArray(tagD)[1] = dy;
+		c.RealArray(tagD)[2] = dxy;
 	}
 
 	// Node loop
@@ -108,15 +119,15 @@ void Problem::initProblem()
 		Node n = inode->getAsNode();
 		double xn[3];
 		n.Centroid(xn);
-		// ...
-		// ... get coordinates, an.sol. and source values
-		// ...
+		n.Real(tagConcAn) = C(xn[0], xn[1]);
+		n.Real(tagSource) = source(xn[0], xn[1]);
+
 		if(n.Boundary()){
 			n.SetMarker(mrkDirNode);
 			n.Integer(tagBCtype) = BC_DIR;
 			numDirNodes++;
-			// set value
-			// ...
+			n.Real(tagBCval) = n.Real(tagConcAn);
+
 		}
 		else{
 			n.Integer(tagGlobInd) = glob_ind;
@@ -140,8 +151,22 @@ void Problem::assembleGlobalSystem(Sparse::Matrix &A, Sparse::Vector &rhs)
 		rMatrix A_loc, rhs_loc;
 		assembleLocalSystem(c, A_loc, rhs_loc);
 		// Now A_loc is 3x3, rhs_loc is 3x1
+		//  
+		//
+		//
+		//
 
 		ElementArray<Node> nodes = c.getNodes();
+		unsigned glob_ind[3];
+		for(unsigned loc_ind = 0; loc_ind < 3; loc_ind++){
+			glob_ind[loc_ind] = static_cast<unsigned>(nodes[loc_ind].Integer(tagGlobInd));
+		}
+		
+		for(unsigned loc_ind = 0; loc_ind < 3; loc_ind++){
+			// Consider node with local index 'loc_ind'
+			for(unsigned j = 0; j < 3; j++)
+				A[glob_ind[loc_ind]][glob_ind[j]] += A_loc(loc_ind,j);
+		}
 	}
 }
 
