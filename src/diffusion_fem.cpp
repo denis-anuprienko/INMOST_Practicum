@@ -5,6 +5,14 @@
 using namespace INMOST;
 using namespace std;
 
+// // Corresponds to tensor
+// // [ 1  0 ]
+// // [ 0 10 ]
+// // rotated by M_PI/6
+// const double Dxx = 3.25;
+// const double Dyy = -0.433013;
+// const double Dxy = 0.25;
+
 const double dx = 1.0;
 const double dy = 1.0;
 const double dxy = 0.0;
@@ -18,6 +26,7 @@ double C(double x, double y)
 
 double source(double x, double y)
 {
+	//return 0;
 	return -a*a * (2.*dxy * cos(a*x)*cos(a*y) - (dx+dy) * sin(a*x)*sin(a*y));
 }
 
@@ -134,11 +143,209 @@ void Problem::initProblem()
 			glob_ind++;
 		}
 	}
+	printf("Number of Dirichlet nodes: %d\n", numDirNodes);
 }
 
+double basis_func(const Cell &c, const Node &n, double x_, double y_)
+{
+    ElementArray<Node> nodes = c.getNodes();
+	unsigned n_ind = 0;
+	double x[3];
+	double y[3];
+	for(unsigned i = 0; i < 3; i++){
+		if(n == nodes[i])
+			n_ind = i;
+		double coords[3];
+		nodes[i].Centroid(coords);
+		x[i] = coords[0];
+		y[i] = coords[1];
+	}
+	
+	if(n_ind == 0){
+		return ((x_   - x[2])*(y[1] - y[2]) - (x[1] - x[2])*(y_   - y[2])) /
+			   ((x[0] - x[2])*(y[1] - y[2]) - (x[1] - x[2])*(y[0] - y[2]));
+	}
+	else if(n_ind == 1){
+		return ((x_   - x[2])*(y[0] - y[2]) - (x[0] - x[2])*(y_   - y[2])) /
+			   ((x[1] - x[2])*(y[0] - y[2]) - (x[0] - x[2])*(y[1] - y[2]));
+	}
+	else if(n_ind == 2){
+		return ((x_   - x[0])*(y[1] - y[0]) - (x[1] - x[0])*(y_   - y[0])) /
+			   ((x[2] - x[0])*(y[1] - y[0]) - (x[1] - x[0])*(y[2] - y[0]));
+	}
+	else{
+		printf("Unexpected n_ind = %d\n", n_ind);
+		exit(1);
+	}
+}
+
+rMatrix basis_func_grad(const Cell &c, const Node &n)
+{
+    ElementArray<Node> nodes = c.getNodes();
+	double x[3];
+	double y[3];
+	// gradient of the basis function
+	rMatrix grad(2,1);
+	unsigned n_ind = 0;
+	for(unsigned i = 0; i < 3; i++){
+		if(n == nodes[i])
+			n_ind = i;
+		double coords[3];
+		nodes[i].Centroid(coords);
+		x[i] = coords[0];
+		y[i] = coords[1];
+	}
+	
+	if(n_ind == 0){
+		grad(0,0) = (y[1] - y[2]);
+		grad(1,0) = - (x[1] - x[2]);
+		grad /= ((x[0] - x[2])*(y[1] - y[2]) - (x[1] - x[2])*(y[0] - y[2]));
+	}
+	else if(n_ind == 1){
+		grad(0,0) = (y[0] - y[2]);
+		grad(1,0) = - (x[0] - x[2]);
+		grad /= ((x[1] - x[2])*(y[0] - y[2]) - (x[0] - x[2])*(y[1] - y[2]));
+	}
+	else if(n_ind == 2){
+		grad(0,0) = (y[1] - y[0]);
+		grad(1,0) = - (x[1] - x[0]);
+		grad /= ((x[2] - x[0])*(y[1] - y[0]) - (x[1] - x[0])*(y[2] - y[0]));
+	}
+	else{
+		printf("Unexpected n_ind = %d\n", n_ind);
+		exit(1);
+	}
+	return grad;
+}
+
+void coords_from_barycentric(double *node_x, double *node_y, double *eta, double *x, double *y)
+{
+	*x = node_x[0] * eta[0] + node_x[1] * eta[1] + node_x[2] * eta[2];
+	*y = node_y[0] * eta[0] + node_y[1] * eta[1] + node_y[2] * eta[2];
+}
+
+double integrate_over_triangle(const Cell &c, const Node n, double (*f)(double, double, const Cell&, const Node&))
+{
+	double res = 0.0;
+	double w3 = 0.205950504760887;
+	double w6 = 0.063691414286223;
+	double eta3[3] = {0.124949503233232, 0.437525248383384, 0.437525248383384};
+	double eta6[3] = {0.797112651860071, 0.165409927389841, 0.037477420750088};
+
+	ElementArray<Node> nodes = c.getNodes();
+	if(nodes.size() != 3){
+		printf("Cell is not a triangle, has %lld nodes!\n", nodes.size());
+		exit(1);
+	}
+	// Coordinates of triangle nodes
+	double node_x[3], node_y[3];
+	// Set them
+	for(unsigned i = 0; i < 3; i++){
+		double c[3];
+		nodes[i].Centroid(c);
+		node_x[i] = c[0];
+		node_y[i] = c[1];
+	}
+
+	// Add contribution from all combinations in eta3
+	double x, y, val;
+	double eta[3];
+	eta[0] = eta3[0];
+	eta[1] = eta3[1];
+	eta[2] = eta3[2];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x, y, c, n);
+	//printf("x = %e, y = %e, val = %e\n", x, y, val);
+	res += w3 * val;
+	eta[0] = eta3[1];
+	eta[1] = eta3[2];
+	eta[2] = eta3[0];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x, y, c, n);
+	res += w3 * val*val;
+	eta[0] = eta3[2];
+	eta[1] = eta3[0];
+	eta[2] = eta3[1];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x, y, c, n);
+	res += w3 * val*val;
+
+
+	// Add contribution from all combinations in eta6
+	eta[0] = eta6[0];
+	eta[1] = eta6[1];
+	eta[2] = eta6[2];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x, y, c, n);
+	res += w6 * val;
+	eta[0] = eta6[0];
+	eta[1] = eta6[2];
+	eta[2] = eta6[1];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x, y, c, n);
+	res += w6 * val;
+	eta[0] = eta6[1];
+	eta[1] = eta6[0];
+	eta[2] = eta6[2];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x, y, c, n);
+	res += w6 * val;
+	eta[0] = eta6[1];
+	eta[1] = eta6[2];
+	eta[2] = eta6[0];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x, y, c, n);
+	res += w6 * val;
+	eta[0] = eta6[2];
+	eta[1] = eta6[0];
+	eta[2] = eta6[1];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x, y, c, n);
+	res += w6 * val;
+	eta[0] = eta6[2];
+	eta[1] = eta6[1];
+	eta[2] = eta6[0];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x, y, c, n);
+	res += w6 * val;
+
+	res *= c.Volume();
+	return res;
+}
+
+double fphi(double x, double y, const Cell& c, const Node& n) {
+
+	return source(x, y) * basis_func(c, n, x, y);
+}
+
+// [ [phi1,phi1], [phi1,phi2]...   ]
+// [   ]
+// [   ]
+// energetic scalar product: [u,v] = (D*grad(u), grad(v)) = (grad(v))^T * D * grad(u)
 void Problem::assembleLocalSystem(const Cell &c, rMatrix &A_loc, rMatrix &rhs_loc)
 {
-
+     rMatrix D(2,2);
+	 D(0,0) = c.RealArray(tagD)[0];
+	 D(1,1) = c.RealArray(tagD)[1];
+	 D(0,1) = D(1,0) = c.RealArray(tagD)[2];
+	 
+	 ElementArray<Node> nodes = c.getNodes();
+	 
+	 A_loc = rMatrix(3,3);
+	 rhs_loc = rMatrix(3,1);
+	 
+	 for(unsigned i = 0; i < 3; i++){
+		 rMatrix grad_phi_i = basis_func_grad(c, nodes[i]);
+		 rhs_loc(i,0) = integrate_over_triangle(c, nodes[i], fphi);
+		 for(unsigned j = 0; j < 3; j++){
+			 rMatrix grad_phi_j = basis_func_grad(c, nodes[j]);
+			double val = (grad_phi_j.Transpose() * (D * grad_phi_i))(0,0);
+			A_loc(i,j) = val * c.Volume();
+		 }
+		 
+		 // integrate RHS
+	 }
+	 
 }
 
 void Problem::assembleGlobalSystem(Sparse::Matrix &A, Sparse::Vector &rhs)
@@ -164,8 +371,20 @@ void Problem::assembleGlobalSystem(Sparse::Matrix &A, Sparse::Vector &rhs)
 		
 		for(unsigned loc_ind = 0; loc_ind < 3; loc_ind++){
 			// Consider node with local index 'loc_ind'
-			for(unsigned j = 0; j < 3; j++)
-				A[glob_ind[loc_ind]][glob_ind[j]] += A_loc(loc_ind,j);
+			
+			// Check if this is a Dirichlet node
+			if(nodes[loc_ind].GetMarker(mrkDirNode))
+				continue;
+			
+			for(unsigned j = 0; j < 3; j++){
+				if(nodes[j].GetMarker(mrkDirNode)){
+					rhs[glob_ind[loc_ind]] -= A_loc(loc_ind,j) * nodes[j].Real(tagBCval);
+				}
+				else
+					A[glob_ind[loc_ind]][glob_ind[j]] += A_loc(loc_ind,j);
+				
+			}
+			rhs[glob_ind[loc_ind]] += rhs_loc(loc_ind,0);
 		}
 	}
 }
@@ -204,8 +423,10 @@ void Problem::run()
 
 	for(Mesh::iteratorNode inode = m.BeginNode(); inode != m.EndNode(); inode++){
 		Node n = inode->getAsNode();
-		if(n.GetMarker(mrkDirNode))
+		if(n.GetMarker(mrkDirNode)){
+			n.Real(tagConc) = n.Real(tagBCval);
 			continue;
+		}
 		unsigned ind = static_cast<unsigned>(n.Integer(tagGlobInd));
 		n.Real(tagConc) = sol[ind];
 	}

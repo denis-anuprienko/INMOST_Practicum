@@ -285,7 +285,94 @@ double integrate_over_triangle(const Cell &c, double (*f)(double, double))
 		double c[3];
 		nodes[i].Centroid(c);
 		node_x[i] = c[0];
+		node_y[i] = c[1]double integrate_over_triangle(const Cell &c, double (*f)(double, double))
+{
+	double res = 0.0;
+	double w3 = 0.205950504760887;
+	double w6 = 0.063691414286223;
+	double eta3[3] = {0.124949503233232, 0.437525248383384, 0.437525248383384};
+	double eta6[3] = {0.797112651860071, 0.165409927389841, 0.037477420750088};
+
+	ElementArray<Node> nodes = c.getNodes();
+	if(nodes.size() != 3){
+		printf("Cell is not a triangle, has %lld nodes!\n", nodes.size());
+		exit(1);
+	}
+	// Coordinates of triangle nodes
+	double node_x[3], node_y[3];
+	// Set them
+	for(unsigned i = 0; i < 3; i++){
+		double c[3];
+		nodes[i].Centroid(c);
+		node_x[i] = c[0];
 		node_y[i] = c[1];
+	}
+
+	// Add contribution from all combinations in eta3
+	double x, y, val;
+	double eta[3];
+	eta[0] = eta3[0];
+	eta[1] = eta3[1];
+	eta[2] = eta3[2];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x,y);
+	//printf("x = %e, y = %e, val = %e\n", x, y, val);
+	res += w3 * val;
+	eta[0] = eta3[1];
+	eta[1] = eta3[2];
+	eta[2] = eta3[0];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x,y);
+	res += w3 * val*val;
+	eta[0] = eta3[2];
+	eta[1] = eta3[0];
+	eta[2] = eta3[1];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x,y);
+	res += w3 * val*val;
+
+
+	// Add contribution from all combinations in eta6
+	eta[0] = eta6[0];
+	eta[1] = eta6[1];
+	eta[2] = eta6[2];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x,y);
+	res += w6 * val;
+	eta[0] = eta6[0];
+	eta[1] = eta6[2];
+	eta[2] = eta6[1];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x,y);
+	res += w6 * val;
+	eta[0] = eta6[1];
+	eta[1] = eta6[0];
+	eta[2] = eta6[2];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x,y);
+	res += w6 * val;
+	eta[0] = eta6[1];
+	eta[1] = eta6[2];
+	eta[2] = eta6[0];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x,y);
+	res += w6 * val;
+	eta[0] = eta6[2];
+	eta[1] = eta6[0];
+	eta[2] = eta6[1];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x,y);
+	res += w6 * val;
+	eta[0] = eta6[2];
+	eta[1] = eta6[1];
+	eta[2] = eta6[0];
+	coords_from_barycentric(node_x, node_y, eta, &x, &y);
+	val = f(x,y);
+	res += w6 * val;
+
+	res *= c.Volume();
+	return res;
+};
 	}
 
 	// Add contribution from all combinations in eta3
