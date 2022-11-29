@@ -5,34 +5,44 @@
 using namespace INMOST;
 using namespace std;
 
-const double dx = 1.0;
-const double dy = 1.0;
-const double dxy = 0.0;
+//const double dx = 1.0;
+//const double dy = 1.0;
+//const double dxy = 0.0;
+// Corresponds to tensor
+// [ 1  0 ]
+// [ 0 10 ]
+// rotated by M_PI/6
+const double dx = 10;//3.25;
+const double dy = 6;//-0.433013;
+const double dxy = 2*sqrt(3);//0.25;
 const double pi = 3.1415926535898;
 const double a = 1;
 
 double C(double x, double y)
 {
-	return sin(a*x) * sin(a*y);
+        return 0;//sin(a*x) * sin(a*y);
 }
 
 double source(double x, double y)
 {
-	return -a*a * (2.*dxy * cos(a*x)*cos(a*y) - (dx+dy) * sin(a*x)*sin(a*y));
+        double r = sqrt((x-0.5)*(x-0.5) + (y-0.5)*(y-0.5));
+	if(r < 0.1)
+	        return -10;
+	return 0;//-a*a * (2.*dxy * cos(a*x)*cos(a*y) - (dx+dy) * sin(a*x)*sin(a*y));
 }
 
 enum BoundCondType
 {
-	BC_DIR = 1,
-	BC_NEUM = 2
+        BC_DIR = 1,
+        BC_NEUM = 2
 };
 
 // Class including everything needed
 class Problem
 {
 private:
-	/// Mesh
-	Mesh &m;
+        /// Mesh
+        Mesh &m;
 	// =========== Tags =============
 	/// Solution tag: 1 real value per node
 	Tag tagConc;
@@ -83,8 +93,8 @@ Problem::~Problem()
 
 void Problem::initProblem()
 {
-	// Init tags
-	tagConc = m.CreateTag(tagNameConc, DATA_REAL, NODE, NONE, 1);
+        // Init tags
+        tagConc = m.CreateTag(tagNameConc, DATA_REAL, NODE, NONE, 1);
 	tagD = m.CreateTag(tagNameD, DATA_REAL, CELL, NONE, 3);
 	tagBCtype = m.CreateTag(tagNameBCtype, DATA_INTEGER, NODE, NODE, 1);
 	tagBCval = m.CreateTag(tagNameBCval, DATA_REAL, NODE, NONE, 1);
@@ -96,11 +106,11 @@ void Problem::initProblem()
 	// 1. Check that cell is a triangle
 	// 2. Set diffusion tensor values
 	for(Mesh::iteratorCell icell = m.BeginCell(); icell != m.EndCell(); icell++){
-		Cell c = icell->getAsCell();
+	        Cell c = icell->getAsCell();
 		ElementArray<Node> nodes = c.getNodes();
 		if(nodes.size() != 3){
-			printf("Cell %d is not a triangle, has %llu nodes!",
-				   c.LocalID(), nodes.size());
+		        printf("Cell %d is not a triangle, has %llu nodes!",
+			           c.LocalID(), nodes.size());
 		}
 
 		c.RealArray(tagD)[0] = dx; // Dx
@@ -116,14 +126,14 @@ void Problem::initProblem()
 	numDirNodes = 0;
 	int glob_ind = 0;
 	for(Mesh::iteratorNode inode = m.BeginNode(); inode != m.EndNode(); inode++){
-		Node n = inode->getAsNode();
+	        Node n = inode->getAsNode();
 		double xn[3];
 		n.Centroid(xn);
 		n.Real(tagConcAn) = C(xn[0], xn[1]);
 		n.Real(tagSource) = source(xn[0], xn[1]);
 
 		if(n.Boundary()){
-			n.SetMarker(mrkDirNode);
+		        n.SetMarker(mrkDirNode);
 			n.Integer(tagBCtype) = BC_DIR;
 			numDirNodes++;
 			n.Real(tagBCval) = n.Real(tagConcAn);
@@ -132,7 +142,7 @@ void Problem::initProblem()
 			n.Integer(tagGlobInd) = -1;
 		}
 		else{
-			n.Integer(tagGlobInd) = glob_ind;
+		        n.Integer(tagGlobInd) = glob_ind;
 			glob_ind++;
 		}
 	}
@@ -141,7 +151,7 @@ void Problem::initProblem()
 
 void Problem::assembleLocalSystem(const Cell &c, rMatrix &A_loc, rMatrix &rhs_loc)
 {;
-	ElementArray<Node> nodes = c.getNodes();
+        ElementArray<Node> nodes = c.getNodes();
 
 	double x0[2], x1[2], x2[2];
 	nodes[0].Barycenter(x0);
@@ -200,11 +210,11 @@ void Problem::assembleLocalSystem(const Cell &c, rMatrix &A_loc, rMatrix &rhs_lo
 
 void Problem::assembleGlobalSystem(Sparse::Matrix &A, Sparse::Vector &rhs)
 {
-	// Cell loop
-	// For each cell assemble local system
-	// and incorporate it into global
-	for(Mesh::iteratorCell icell = m.BeginCell(); icell != m.EndCell(); icell++){
-		Cell c = icell->getAsCell();
+        // Cell loop
+        // For each cell assemble local system
+        // and incorporate it into global
+        for(Mesh::iteratorCell icell = m.BeginCell(); icell != m.EndCell(); icell++){
+	        Cell c = icell->getAsCell();
 		rMatrix A_loc, rhs_loc;
 		assembleLocalSystem(c, A_loc, rhs_loc);
 		// Now A_loc is 3x3, rhs_loc is 3x1
@@ -218,21 +228,21 @@ void Problem::assembleGlobalSystem(Sparse::Matrix &A, Sparse::Vector &rhs)
 
 		unsigned ind[3];
 		for(unsigned i = 0; i < 3; i++)
-			ind[i] = static_cast<unsigned>(nodes[i].Integer(tagGlobInd));
+		        ind[i] = static_cast<unsigned>(nodes[i].Integer(tagGlobInd));
 
 		for(unsigned i = 0; i < 3; i++){
-			if(nodes[i].GetMarker(mrkDirNode)){
-				// There's no row corresponding to nodes[0]
-				double bcVal = nodes[i].Real(tagBCval);
+		        if(nodes[i].GetMarker(mrkDirNode)){
+			        // There's no row corresponding to nodes[0]
+			        double bcVal = nodes[i].Real(tagBCval);
 				for(unsigned j = 0; j < 3; j++){
-					if(j == i)
-						continue;
+				        if(j == i)
+					        continue;
 					if(!nodes[j].GetMarker(mrkDirNode))
-						rhs[ind[j]] -= bcVal * A_loc(i,j);
+					        rhs[ind[j]] -= bcVal * A_loc(i,j);
 				}
 			}
 			else{
-				A[ind[i]][ind[0]] += A_loc(i,0);
+			        A[ind[i]][ind[0]] += A_loc(i,0);
 				A[ind[i]][ind[1]] += A_loc(i,1);
 				A[ind[i]][ind[2]] += A_loc(i,2);
 
@@ -244,8 +254,8 @@ void Problem::assembleGlobalSystem(Sparse::Matrix &A, Sparse::Vector &rhs)
 
 void Problem::run()
 {
-	// Matrix size
-	unsigned N = static_cast<unsigned>(m.NumberOfNodes()) - numDirNodes;
+        // Matrix size
+        unsigned N = static_cast<unsigned>(m.NumberOfNodes()) - numDirNodes;
 	// Global matrix called 'stiffness matrix'
 	Sparse::Matrix A;
 	// Solution vector
@@ -268,16 +278,16 @@ void Problem::run()
 	S.SetMatrix(A);
 	bool solved = S.Solve(rhs, sol);
 	if(!solved){
-		printf("Linear solver failed: %s\n", S.GetReason().c_str());
+	        printf("Linear solver failed: %s\n", S.GetReason().c_str());
 		printf("Number of iterations: %d\n", S.Iterations());
 		printf("Residual:             %e\n", S.Residual());
 		exit(1);
 	}
 
 	for(Mesh::iteratorNode inode = m.BeginNode(); inode != m.EndNode(); inode++){
-		Node n = inode->getAsNode();
+	        Node n = inode->getAsNode();
 		if(n.GetMarker(mrkDirNode))
-			continue;
+		        continue;
 		unsigned ind = static_cast<unsigned>(n.Integer(tagGlobInd));
 		n.Real(tagConc) = sol[ind];
 	}
@@ -288,9 +298,9 @@ void Problem::run()
 
 int main(int argc, char ** argv)
 {
-	if( argc < 2 )
+        if( argc < 2 )
 	{
-		printf("Usage: %s mesh_file\n",argv[0]);
+	        printf("Usage: %s mesh_file\n",argv[0]);
 		return -1;
 	}
 
